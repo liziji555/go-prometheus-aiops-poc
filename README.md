@@ -363,6 +363,21 @@ for i in $(seq 1 50); do curl -s "http://localhost:8080/work?mode=slow" & done; 
 └── go.mod                         # 零依赖
 ```
 
+## 48 小时落地计划
+
+不谈宏大架构——第一个小切口就是**用本仓库 dogfooding**：
+
+- **Day 1 下午**：Bot 拉进 `go-prometheus-aiops-poc` 仓库本身（它就是真实
+  代码库，`cmd/demo-service` 有可改的 Go 代码），docker compose 起栈。
+- **第一条测试告警**：`curl /work?mode=slow` 手动触发
+  `DemoServiceHighP99Latency` → webhook → Bot 接单。告警上下文里带上
+  "最近 commits + 慢路径线索"。
+- **预期的第一个成功 PR**：Bot 定位到 demo-service 里注入的慢路径（写死
+  的 500ms sleep），给出最小修复 diff 开 PR——一条可 review、可 merge、
+  合并后 P99 回落告警 resolved 的真实修复，验证全链路不是纸上谈兵。
+- **Day 2**：换一个团队真实 Go 服务仓库，接 `/metrics` + P99 告警规则，
+  跑真实流量观察误报率，调阈值。
+
 ## 生产化 Roadmap
 
 - [ ] `client_golang` 替换手搓 exposition（exemplars、runtime metrics）
