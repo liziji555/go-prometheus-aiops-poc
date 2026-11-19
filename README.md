@@ -143,6 +143,41 @@ sequenceDiagram
 fingerprint 去重，避免一个告警开出 N 个 Devin session（当前 POC 未实现，
 见 Roadmap）。
 
+## 防误判与防死循环
+
+自动触发一个有代码写权限的 Agent，最大的两个风险是**误报**（告警不值得修）
+和**死循环**（修了没好 → 再触发 → 再修）。防护分两段：
+
+### 防误判（dispatch 之前）
+
+- **持续期门控**：`for` + `keep_firing_for` 保证只有持续越线的告警才到达
+  receiver，瞬时毛刺在 Prometheus 层就被滤掉。
+- **severity 分级路由**：只有 `severity=critical` 自动派 Devin；`warning`
+  只落日志/进工单队列，由人工决定是否立案（对应 Roadmap 的多 receiver 路由）。
+- **prompt 自带验证指令**：发给 Devin 的 prompt 明确要求先复现指标回归再动
+  代码——指标如果已经健康，session 输出 false-positive 报告而不是硬开一个 PR。
+- **fingerprint 幂等去重**：同一 fingerprint 在冷却窗口内只开一个 session，
+  Alertmanager 的 `group_interval`/`repeat_interval` 重投不产生重复工单。
+
+### 防死循环（dispatch 之后）
+
+- **熔断器**：同一 fingerprint 每小时限 N 个 session；修复合并后告警仍
+  firing → 不再自动派单，升级人工处理。
+- **PR 不自动合并**：Devin 的产出是 PR 而不是 hotfix——CI + human review 是
+  硬门，烂修复根本进不了 prod，循环链路被物理剪断。
+- **明确终态**：`send_resolved` 通知回到 receiver 确认闭环收口；未恢复的
+  告警靠 `repeat_interval` 提醒人工，而不是无限重复创建 session。
+
+### 一个真实故障场景（这套东西修什么）
+
+某次上线把列表查询改成 N+1（ORM eager load 丢了）：p50 纹丝不动，P99 从
+80ms 涨到 600ms，1% 的请求卡到秒级——avg 告警完全瞎掉。本栈的链路是：
+`histogram_quantile` 告警 firing → webhook 把 alertname + fingerprint +
+summary 交给 Devin → session 对照最近 diff 定位到查询改动 → 恢复 eager
+load 开 PR → 人工合并 → P99 回落 → resolved 通知收口。
+**这套系统的价值不在"自动修"，在于把 P99 回归从"用户投诉驱动"变成
+"指标驱动 + 自动立案"。**
+
 ## 最小权限原则
 
 闭环里最危险的一步是"告警自动触发一个有代码写权限的 Agent"。权限收敛：
