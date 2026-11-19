@@ -42,6 +42,10 @@ var (
 )
 
 func alertsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		listHandler(w, r)
+		return
+	}
 	if r.Method != http.MethodPost {
 		http.Error(w, "POST only", http.StatusMethodNotAllowed)
 		return
