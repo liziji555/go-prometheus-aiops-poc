@@ -178,6 +178,43 @@ load 开 PR → 人工合并 → P99 回落 → resolved 通知收口。
 **这套系统的价值不在"自动修"，在于把 P99 回归从"用户投诉驱动"变成
 "指标驱动 + 自动立案"。**
 
+## 常驻 Devin Bot 协同模式
+
+上面的闭环用的是一次性 session（每告警一个）。更进一步是把 receiver 对接
+一个**持久在线的 Devin Bot**——它有自己的记忆，常驻 Slack 频道，在闭环里
+扮演"值班 SRE"而不是一次性 worker：
+
+```mermaid
+flowchart LR
+    A["Alertmanager"] --> R["webhook-receiver"]
+    R --> B["Devin Bot（常驻 Slack #aiops-alerts）"]
+    B <-->|"在线程里追加线索、拍板"| H["人类工程师"]
+    B --> M[("长期记忆：故障指纹→根因→修复手法")]
+    B --> PR["GitHub PR"]
+    PR --> H
+    B --> RB["runbook / 告警阈值调整 PR"]
+```
+
+**Bot 在闭环里的分工：**
+
+- **接警与分诊**：receiver 不再直接 `POST /v1/sessions`，而是把告警事件
+  发给常驻 Bot；Bot 先查自己的记忆——相同 fingerprint / 相似签名（同
+  handler、同分位数）的故障处理过没有，直接把历史根因写进调查 prompt，
+  跳过重复排查。
+- **与人沟通**：告警 firing 时 Bot 在频道发卡片（alert 摘要 + Grafana
+  面板链接 + 初步假设），调查过程在同一个 Slack 线程更新；工程师可以
+  @Bot 补线索（"昨晚刚上了 XX 变更"），线索直接进入会话上下文。
+- **审批接口**：PR 出来后 Bot @相关 CODEOWNERS 请求 review；遇到阻塞
+  （缺权限、缺上下文、拿不准的设计取舍）直接在频道里问，而不是静默卡住。
+- **经验沉淀**：每次闭环 resolved 后，Bot 把"故障指纹 → 根因模式 → 修复
+  手法 → MTTR"写成记忆条目；新故障类型则把 triage 步骤追加到仓库
+  runbook，以 PR 形式提交（人审）。告警反复误报时，Bot 还会提告警阈值
+  调整 PR——闭环从"修代码"扩展到"修监控本身"。
+- **复盘输出**：周期性汇总 firing 次数、MTTR、误报率，发周报到频道。
+
+分工一句话：**Prometheus/Alertmanager 是眼睛，webhook-receiver 是末梢
+神经，常驻 Bot 是有记忆的大脑，人类保留审批和最终裁决权。**
+
 ## 最小权限原则
 
 闭环里最危险的一步是"告警自动触发一个有代码写权限的 Agent"。权限收敛：
