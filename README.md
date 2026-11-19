@@ -215,6 +215,48 @@ flowchart LR
 分工一句话：**Prometheus/Alertmanager 是眼睛，webhook-receiver 是末梢
 神经，常驻 Bot 是有记忆的大脑，人类保留审批和最终裁决权。**
 
+## 极端边界与容灾
+
+最棘手的情况是**级联故障**：上游依赖挂了 → demo-service 的 P99、5xx、
+in-flight 同时 firing，告警风暴打到 receiver。分三层应对：
+
+### 入口：风暴聚合（receiver）
+
+- **incident 归并**：不只按 fingerprint 去重——同一 `groupKey`/时间窗内
+  到达的多条告警归并为**一个 incident**，一次只派一个 Bot 任务并附上全部
+  告警清单，而不是每条告警开一个 session。
+- **全局风暴限流**：告警速率 > N 条/分钟时进入风暴模式，停止逐条派单，
+  只发聚合摘要 + "系统级故障，等待人工裁决"。Bot 的排障上下文永远不会
+  被告警数量线性冲垮——上下文上限是 incident 数，不是告警条数。
+
+### 定位：识别"根因在外部依赖"（Bot）
+
+外部依赖超时引发的告警有明确的指标签名，Bot 按这组信号做归因：
+
+| 信号 | 说明 |
+|---|---|
+| 错误集中在同一外部 host | 日志/追踪里全是指向某下游的 `dial timeout`、`i/o timeout` |
+| 延迟↑但资源指标正常 | CPU/mem/goroutine 平稳 + 尾延迟飙升 = 典型下游堆积（连接池打满、retry 放大） |
+| 依赖探活同步 firing | 外部依赖自身的 health 告警也在 firing |
+
+识别出外部根因后，Bot **不改业务代码**，而是转成韧性修复或纯报告：
+
+- **韧性修复 PR**：收紧下游 timeout、加 circuit breaker（fail-fast 而非
+  无限 retry）、bulkhead 隔离——把"外部挂了"的爆炸半径限住，这就是
+  优雅降级。
+- **降级开关建议**：依赖持续不可用时给出临时 feature-flag/config 降级
+  方案，人类在频道里一键裁决。
+- **incident 线程**：风暴期所有告警合并成一条 Slack 线程——人类看到的
+  是"1 个 incident"，而不是"20 个独立故障"。
+
+### 兜底：管道自身挂了
+
+- **receiver 挂**：Alertmanager 配 `Watchdog` 死信告警（dead man's
+  switch），投递失败有重试与告警。
+- **Devin API 挂**：receiver 本地队列重试 + 超时落盘，告警不丢；恢复后
+  补派并标注 `backfilled`。
+- **Slack 挂**：Bot 降级为仅落 incident 记录，恢复后补发摘要。
+
 ## 最小权限原则
 
 闭环里最危险的一步是"告警自动触发一个有代码写权限的 Agent"。权限收敛：
