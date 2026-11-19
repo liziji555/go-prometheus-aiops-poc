@@ -121,6 +121,12 @@ func (m *metrics) render(w http.ResponseWriter, _ *http.Request) {
 	fmt.Fprint(w, b.String())
 }
 
+// fetchOrderDetail simulates loading one related detail row via an indexed
+// lookup (~12-20ms each).
+func fetchOrderDetail(_ int) {
+	time.Sleep(time.Duration(12+rand.Intn(8)) * time.Millisecond)
+}
+
 // workHandler simulates real work. ?mode=slow forces a tail-latency request,
 // ?mode=error produces 5xx; default traffic is fast with a ~3% natural tail
 // so the P99 alert fires on its own once enough traffic accumulates.
@@ -136,6 +142,10 @@ func workHandler(w http.ResponseWriter, r *http.Request) {
 			code = http.StatusInternalServerError
 		}
 	default:
+		// 每条工单带出关联明细行
+		for i := 0; i < 30; i++ {
+			fetchOrderDetail(i)
+		}
 		d = time.Duration(5+rand.Intn(45)) * time.Millisecond
 		if rand.Intn(100) < 3 {
 			d = time.Duration(550+rand.Intn(300)) * time.Millisecond
