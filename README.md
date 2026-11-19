@@ -329,8 +329,8 @@ curl http://localhost:8080/metrics   # 原始指标
 DEVIN_API_KEY=<your-key> docker compose up -d webhook-receiver
 ```
 
-**手动触发告警**：内置 loadgen 已经混入 ~4% 慢请求，P99 告警通常 2-3 分钟内
-自己 firing。想立刻触发：
+**手动触发告警**：默认流量是健康基线（P99 ~300ms，低于 SLO）——用
+`?mode=slow` 注入慢请求触发 firing：
 
 ```bash
 for i in $(seq 1 50); do curl -s "http://localhost:8080/work?mode=slow" & done; wait
