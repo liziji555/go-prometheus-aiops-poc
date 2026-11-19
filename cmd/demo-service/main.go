@@ -142,10 +142,16 @@ func workHandler(w http.ResponseWriter, r *http.Request) {
 			code = http.StatusInternalServerError
 		}
 	default:
-		// 每条工单带出关联明细行
+		// 每条工单带出关联明细行；并发拉取避免串行查询放大尾延迟
+		var wg sync.WaitGroup
 		for i := 0; i < 30; i++ {
-			fetchOrderDetail(i)
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				fetchOrderDetail(i)
+			}(i)
 		}
+		wg.Wait()
 		d = time.Duration(5+rand.Intn(45)) * time.Millisecond
 		if rand.Intn(100) < 3 {
 			d = time.Duration(550+rand.Intn(300)) * time.Millisecond
