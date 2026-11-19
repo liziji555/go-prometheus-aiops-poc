@@ -1,0 +1,30 @@
+groups:
+  - name: demo-service-slo
+    interval: 15s
+    rules:
+      # Tail latency: P99 of /work over a 5m window above 400ms for 1m.
+      # histogram_quantile needs the raw _bucket series, summed across every
+      # label dimension except `le`.
+      - alert: DemoServiceHighP99Latency
+        expr: histogram_quantile(0.99, sum(rate(demo_http_request_duration_seconds_bucket{handler="/work"}[5m])) by (le)) > 0.4
+        for: 1m
+        keep_firing_for: 1m
+        labels:
+          severity: critical
+          service: demo-service
+          team: aiops
+        annotations:
+          summary: "demo-service /work P99 latency > 400ms for 1m"
+          description: "histogram_quantile(0.99, rate[5m]) breached the latency SLO — a tail-latency regression, not an average-latency one."
+          runbook_url: "https://github.com/liziji555/go-prometheus-aiops-poc#runbook"
+
+      - alert: DemoServiceHighErrorRate
+        expr: sum(rate(demo_http_requests_total{handler="/work", code=~"5.."}[5m])) / sum(rate(demo_http_request_duration_seconds_count{handler="/work"}[5m])) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          service: demo-service
+          team: aiops
+        annotations:
+          summary: "demo-service 5xx error rate > 5% for 2m"
+          description: "Elevated 5xx fraction on /work."

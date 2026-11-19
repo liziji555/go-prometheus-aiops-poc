@@ -1,0 +1,70 @@
+name: go-prometheus-aiops-poc
+
+services:
+  demo-service:
+    build: .
+    command: ["/app/demo-service"]
+    environment:
+      PORT: "8080"
+      LOADGEN: "true" # built-in traffic generator so alerts fire on their own
+    ports:
+      - "8080:8080"
+
+  webhook-receiver:
+    build: .
+    command: ["/app/webhook-receiver"]
+    environment:
+      PORT: "9000"
+      # Set to enable auto-creating Devin sessions on firing alerts.
+      # Never hard-code a real key here — pass it in: DEVIN_API_KEY=... docker compose up
+      DEVIN_API_KEY: ""
+    ports:
+      - "9000:9000"
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=7d"
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - demo-service
+      - alertmanager
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+    volumes:
+      - ./deploy/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    ports:
+      - "9093:9093"
+    depends_on:
+      - webhook-receiver
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    environment:
+      # Read-only demo: anonymous users get Viewer, nothing else can write.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+      GF_SECURITY_ADMIN_USER: "admin"
+      GF_SECURITY_ADMIN_PASSWORD: "admin" # POC only — override in any real deployment
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  prometheus-data:
+  alertmanager-data:
+  grafana-data:
