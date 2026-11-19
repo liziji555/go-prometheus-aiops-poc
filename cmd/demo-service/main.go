@@ -129,7 +129,7 @@ func fetchOrderDetail(_ int) {
 
 // workHandler simulates real work. ?mode=slow forces a tail-latency request,
 // ?mode=error produces 5xx; default traffic is fast with a ~3% natural tail
-// (250-350ms, below the 400ms P99 SLO) so a healthy baseline stays resolved —
+// (150-250ms, below the 400ms P99 SLO) so a healthy baseline stays resolved —
 // inject ?mode=slow to fire the alert on demand.
 func workHandler(w http.ResponseWriter, r *http.Request) {
 	var d time.Duration
@@ -155,7 +155,7 @@ func workHandler(w http.ResponseWriter, r *http.Request) {
 		wg.Wait()
 		d = time.Duration(5+rand.Intn(45)) * time.Millisecond
 		if rand.Intn(100) < 3 {
-			d = time.Duration(250+rand.Intn(100)) * time.Millisecond
+			d = time.Duration(150+rand.Intn(100)) * time.Millisecond
 		}
 	}
 	time.Sleep(d)

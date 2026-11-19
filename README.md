@@ -329,7 +329,7 @@ curl http://localhost:8080/metrics   # 原始指标
 DEVIN_API_KEY=<your-key> docker compose up -d webhook-receiver
 ```
 
-**手动触发告警**：默认流量是健康基线（P99 ~300ms，低于 SLO）——用
+**手动触发告警**：默认流量是健康基线（P99 ~200ms，低于 SLO）——用
 `?mode=slow` 注入慢请求触发 firing：
 
 ```bash
