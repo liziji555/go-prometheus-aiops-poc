@@ -257,6 +257,47 @@ in-flight 同时 firing，告警风暴打到 receiver。分三层应对：
   补派并标注 `backfilled`。
 - **Slack 挂**：Bot 降级为仅落 incident 记录，恢复后补发摘要。
 
+## 安全与合规红线
+
+常驻 Bot 在生产排障的最大风险是**凭证泄露**和**数据出境**——DB schema
+敏感字段、业务日志里的 PII、生产环境变量，都不能因为"开 PR / 复现 /
+Slack 汇报"流出边界。四层控制：
+
+### 数据访问边界
+
+- **网络隔离**：Bot session 的 net policy 只放行 GitHub、Slack、内部监控
+  域名——生产 DB 直连不可达，Bot 只能从代码侧产物（migration、ORM model、
+  schema 定义）推断结构，永远摸不到真实数据行。
+- **Repo 路径禁入**：fine-grained PAT + playbook 双重约束，`.env*`、
+  `secrets/`、`credentials*` 类路径既不可读也不可写。
+- **环境变量隔离**：生产环境变量绝不注入 Bot session；复现只用本地容器
+  + 合成数据，session 里能看到的全是 stub。
+
+### 复现与测试的数据卫生
+
+- **合成数据**：排障复现一律用 faker/fixture 生成的脱敏数据；禁止把生产
+  日志、DB dump 拉进 session。
+- **脱敏前置**：日志进 Bot 上下文之前先过脱敏管道（正则/DLP 扫手机号、
+  身份证、邮箱、token 模式），脏数据根本到不了模型眼前。
+
+### 出站过滤（PR / Slack 汇报）
+
+- **secret-scanner 拦截**：Bot 的 PR 描述、评论、Slack 卡片在发出前过
+  gitleaks/trufflehog 风格扫描，命中凭据/连接串/schema 敏感字段值即拦截
+  并告警。
+- **汇报只发元数据**：Slack 卡片只含指标值、告警标签、fingerprint、
+  Grafana 链接——绝不贴日志原文、环境变量值、查询结果行。
+
+### 红线清单（明确"永不"）
+
+| 永不 | 兜底机制 |
+|---|---|
+| 直连生产数据库 | 网络策略物理隔离 |
+| 生产凭据进任何制品 | repo 禁入路径 + secret-scanner 出站拦截 |
+| PII 出脱敏管道 | 日志脱敏前置 + 出站二次扫描 |
+| Slack/PR 贴日志原文、env 值 | 汇报模板只含指标元数据 |
+| 外部依赖故障时碰数据面 | 只做韧性改动（timeout/breaker），不改业务逻辑 |
+
 ## 最小权限原则
 
 闭环里最危险的一步是"告警自动触发一个有代码写权限的 Agent"。权限收敛：
