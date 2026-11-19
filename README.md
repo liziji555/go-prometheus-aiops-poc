@@ -396,6 +396,17 @@ for i in $(seq 1 50); do curl -s "http://localhost:8080/work?mode=slow" & done; 
 - **Day 2**：换一个团队真实 Go 服务仓库，接 `/metrics` + P99 告警规则，
   跑真实流量观察误报率，调阈值。
 
+**实证——上面这条链路已经真实发生过一次**：
+
+- 告警 `DemoServiceHighP99Latency` 真实 firing（fingerprint
+  `b604179c4b51d393`），Alertmanager webhook 真实投递到 receiver。
+- [Devin session](https://app.devin.ai/sessions/45e36486926d40f184643bbfb59aef59)
+  按生产 prompt 格式接单，git log 定位到回归提交，开出
+  [PR #1](https://github.com/liziji555/go-prometheus-aiops-poc/pull/1)：
+  把 30 次串行 `fetchOrderDetail` 改为并发，p50 ≈ 44ms、p95 ≈ 66ms，
+  3% 自然长尾不变。
+- 合并后 P99 回落、`send_resolved` 收口——闭环全程无人工编码。
+
 ## 生产化 Roadmap
 
 - [ ] `client_golang` 替换手搓 exposition（exemplars、runtime metrics）
