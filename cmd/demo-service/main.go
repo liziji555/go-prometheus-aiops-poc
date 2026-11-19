@@ -80,7 +80,7 @@ func instrument(m *metrics, name string, next http.HandlerFunc) http.HandlerFunc
 }
 
 // render writes the Prometheus text exposition format (version 0.0.4).
-func (m *metrics) render(w http.ResponseWriter) {
+func (m *metrics) render(w http.ResponseWriter, _ *http.Request) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4")

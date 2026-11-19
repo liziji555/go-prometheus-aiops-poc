@@ -12,4 +12,5 @@ RUN apk add --no-cache ca-certificates && adduser -D -u 10001 app
 USER app
 COPY --from=build /out/demo-service /app/demo-service
 COPY --from=build /out/webhook-receiver /app/webhook-receiver
-ENTRYPOINT ["/app/demo-service"]
+# CMD (not ENTRYPOINT) so docker-compose `command:` can select the binary.
+CMD ["/app/demo-service"]
